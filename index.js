@@ -4,6 +4,7 @@ var Web3 = require('web3');
 var SolidityFunction = require('web3/lib/web3/function');
 var EthereumTx = require('ethereumjs-tx');
 var Accounts = require('web3-eth-accounts');
+var MongoClient = require('mongodb').MongoClient;
 
 // TODO: Move these in a config file
 var SERVER_PORT = process.env.PORT || 8080;
@@ -13,11 +14,13 @@ var ETHEREUM_NODE = 'https://api.myetherapi.com/rop';
 var ETHEREUM_NODE_CHAIN_ID = 3;
 var SERVER_ETHEREUM_FROM_ADDRESS = '0x4054Db09C41e787cF5014A453f91c71418faB9AF';
 var SERVER_ETHEREUM_PRIVATE_KEY = 'b5eae943a077be8b3d53d91dd87818f3c869b7ac58723aca1e57575e2a691e3c';
+var DB_URI = process.env.DATABASE_URI || 'mongodb://localhost:27017/starbase';
 
 var MAX_WALLET_OWNERS = 3;
 var MIN_SIGNATURES_REQUIRED = 2;
 
 var web3 = new Web3(new Web3.providers.HttpProvider(ETHEREUM_NODE));
+var db = null;
 
 // This function creates a wallet from wallet factory
 // and stores that entry in database for future quering
@@ -65,21 +68,48 @@ function createWallet(req, res, next) {
   
   web3.eth.sendRawTransaction('0x' + serializedTx.toString('hex'), function(err, hash) {
     if (err) {
-      console.log(err)
       next(err);
       return;
     }
-    console.log(hash)
-    res.send({
-      hash: hash,
-      accounts: ownerAccounts
+    
+    db.collection('wallets').insertOne({hash: hash}, function (err, result) {
+      if (err) {
+        next(err);
+        return;
+      }
+      
+      res.send({
+        _id: result.insertedId,
+        hash: hash,
+        accounts: ownerAccounts
+      });
     });
   });
 }
 
-var server = restify.createServer();
-server.post('/wallet', createWallet);
+// Returns all the wallets created by /wallet API
+function getAllWallets(req, res, next) {
+  db.collection('wallets').find({}).toArray(function (err, wallets) {
+    if (err) {
+      next(err);
+      return;
+    }
+    
+    res.send(wallets);
+  });
+}
 
-server.listen(SERVER_PORT, function () {
-  console.log('%s listening at %s', server.name, server.url);
+MongoClient.connect(DB_URI, function(err, database) {
+	if (err) {
+		console.log(err);
+    return;
+	}
+  
+  db = database;
+  var server = restify.createServer();
+  server.post('/wallet', createWallet);
+  server.get('/wallets', getAllWallets);
+  server.listen(SERVER_PORT, function () {
+    console.log('%s listening at %s', server.name, server.url);
+  });
 });

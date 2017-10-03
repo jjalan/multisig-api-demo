@@ -9,6 +9,7 @@
   "dependencies": {
     "ethereumjs-tx": "^1.3.3",
     "lodash": "^4.17.4",
+    "mongodb": "^2.2.31",
     "restify": "^6.0.1",
     "web3": "0.17.0-alpha",
     "web3-eth-accounts": "^1.0.0-beta.22"
