@@ -9,7 +9,8 @@ var MongoClient = require('mongodb').MongoClient;
 // TODO: Move these in a config file
 var SERVER_PORT = process.env.PORT || 8080;
 var WALLET_FACTORY_CONTRACT_ADDRESS = '0xd18df206913b8e04371c543b631b7121a5c09c14';
-var WALLET_FACTORY_CONTRACT_ABI = require('./abi.js');
+var WALLET_FACTORY_CONTRACT_ABI = require('./abi/wallet-factory.js');
+var WALLET_CONTRACT_ABI = require('./abi/wallet.js');
 var ETHEREUM_NODE = 'https://api.myetherapi.com/rop';
 var ETHEREUM_NODE_CHAIN_ID = 3;
 var SERVER_ETHEREUM_FROM_ADDRESS = '0x4054Db09C41e787cF5014A453f91c71418faB9AF';
@@ -66,24 +67,57 @@ function createWallet(req, res, next) {
   
   var serializedTx = tx.serialize();
   
+  // Whenever a new wallet is created, it will return the contract address
+  // via ContractInstantiation event
+  var walletFactoryContractInstance = web3.eth.contract(WALLET_FACTORY_CONTRACT_ABI).at(WALLET_FACTORY_CONTRACT_ADDRESS);
+  walletFactoryContractInstance.ContractInstantiation({}, function (err, event) {
+    
+    if (err) {
+      next(err);
+      return;
+    }
+    
+    if (event 
+      && event.args 
+      && event.args.sender === SERVER_ETHEREUM_FROM_ADDRESS.toLowerCase()) {
+        
+        var hash = event.transactionHash;
+        var walletAddress = event.args.instantiation;
+      
+        // Get details about the wallet
+        var walletContractInstance = web3.eth.contract(WALLET_CONTRACT_ABI).at(walletAddress);
+        var numberOfConfirmationsRequired = walletContractInstance.required.call();
+        var balance = walletContractInstance._eth.getBalance(walletAddress);
+        var owners = walletContractInstance.getOwners();
+      
+        var obj = {
+          hash: hash,
+          walletAddress: walletAddress,
+          owners: owners,
+          balance: balance,
+          numberOfConfirmationsRequired: numberOfConfirmationsRequired
+        };
+      
+        db.collection('wallets').insertOne(obj, function (err, result) {
+          if (err) {
+            next(err);
+            return;
+          }
+          
+          obj._id = result.insertedId;
+          res.send(obj);
+        });
+      }
+  });
+          
   web3.eth.sendRawTransaction('0x' + serializedTx.toString('hex'), function(err, hash) {
     if (err) {
       next(err);
       return;
     }
     
-    db.collection('wallets').insertOne({hash: hash}, function (err, result) {
-      if (err) {
-        next(err);
-        return;
-      }
-      
-      res.send({
-        _id: result.insertedId,
-        hash: hash,
-        accounts: ownerAccounts
-      });
-    });
+    // Wait for ContractInstantiation event which will return the address
+    // of the wallet created
   });
 }
 
@@ -95,6 +129,15 @@ function getAllWallets(req, res, next) {
       return;
     }
     
+    // Get balance for each wallet
+    for (var i = 0; i < wallets.length; i++) {
+      var wallet = wallets[i];
+      if (wallet.walletAddress) {
+        // Get its balance as it may change between queries
+        var walletContractInstance = web3.eth.contract(WALLET_CONTRACT_ABI).at(wallet.walletAddress);
+        wallet.balance = walletContractInstance._eth.getBalance(wallet.walletAddress);
+      }
+    }
     res.send(wallets);
   });
 }
