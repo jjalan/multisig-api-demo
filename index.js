@@ -73,7 +73,6 @@ function createWallet(req, res, next) {
   walletFactoryContractInstance.ContractInstantiation({}, function (err, event) {
     
     if (err) {
-      next(err);
       return;
     }
     
@@ -91,7 +90,7 @@ function createWallet(req, res, next) {
         var owners = walletContractInstance.getOwners();
       
         var obj = {
-          hash: hash,
+          txHash: hash,
           walletAddress: walletAddress,
           owners: owners,
           balance: balance,
@@ -100,12 +99,8 @@ function createWallet(req, res, next) {
         
         db.collection('wallets').insertOne(obj, function (err, result) {
           if (err) {
-            next(err);
             return;
           }
-          
-          obj._id = result.insertedId;
-          res.send(obj);
         });
       }
   });
@@ -118,6 +113,7 @@ function createWallet(req, res, next) {
     
     // Wait for ContractInstantiation event which will return the address
     // of the wallet created
+    res.send({txHash: hash});
   });
 }
 
@@ -142,6 +138,25 @@ function getAllWallets(req, res, next) {
   });
 }
 
+// Gets information about a wallet using transaction hash
+function getWalletInfo(req, res, next) {
+  db.collection('wallets').findOne({txHash: req.params.txhash}, function (err, wallet) {
+    if (err) {
+      next(err);
+      return;
+    }
+    
+    if (wallet) {
+      var walletContractInstance = web3.eth.contract(WALLET_CONTRACT_ABI).at(wallet.walletAddress);
+      // Get its balance as it may change between queries
+      wallet.balance = parseFloat(walletContractInstance._eth.getBalance(wallet.walletAddress));
+      res.send(wallet);
+    } else {
+      res.send({});
+    }
+  });
+}
+
 // Add a function to allow 
 function allowCORS(req, res, next) {
   res.header("Access-Control-Allow-Origin", "*");
@@ -157,9 +172,13 @@ MongoClient.connect(DB_URI, function(err, database) {
   
   db = database;
   var server = restify.createServer();
+  server.use(restify.plugins.acceptParser(server.acceptable));
+  server.use(restify.plugins.queryParser());
+  server.use(restify.plugins.bodyParser());
   server.use(allowCORS);
   server.post('/wallet', createWallet);
   server.get('/wallets', getAllWallets);
+  server.get('/wallet/tx/:txhash', getWalletInfo);
   server.listen(SERVER_PORT, function () {
     console.log('%s listening at %s', server.name, server.url);
   });
