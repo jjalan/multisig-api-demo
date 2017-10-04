@@ -15,7 +15,7 @@ var ETHEREUM_NODE = 'https://api.myetherapi.com/rop';
 var ETHEREUM_NODE_CHAIN_ID = 3;
 var SERVER_ETHEREUM_FROM_ADDRESS = '0x4054Db09C41e787cF5014A453f91c71418faB9AF';
 var SERVER_ETHEREUM_PRIVATE_KEY = 'b5eae943a077be8b3d53d91dd87818f3c869b7ac58723aca1e57575e2a691e3c';
-var DB_URI = process.env.DATABASE_URI || 'mongodb://localhost:27017/multisig';
+var DB_URI = process.env.DATABASE_URI || 'mongodb://localhost:27017/multisig8';
 
 var MAX_WALLET_OWNERS = 3;
 var MIN_SIGNATURES_REQUIRED = 2;
@@ -90,18 +90,13 @@ function createWallet(req, res, next) {
         var owners = walletContractInstance.getOwners();
       
         var obj = {
-          txHash: hash,
           walletAddress: walletAddress,
           owners: owners,
           balance: balance,
           numberOfConfirmationsRequired: numberOfConfirmationsRequired
         };
         
-        db.collection('wallets').insertOne(obj, function (err, result) {
-          if (err) {
-            return;
-          }
-        });
+        db.collection('wallets').update({txHash: hash}, {$set: obj}, function () {});
       }
   });
           
@@ -111,15 +106,19 @@ function createWallet(req, res, next) {
       return;
     }
     
-    // Wait for ContractInstantiation event which will return the address
-    // of the wallet created
-    res.send({txHash: hash});
+    db.collection('wallets').insertOne({txHash: hash}, function (err, result) {
+      if (err) {
+        return;
+      }
+      
+      res.send({txHash: hash, createdAt: (new Date()).getTime()});
+    });
   });
 }
 
 // Returns all the wallets created by /wallet API
 function getAllWallets(req, res, next) {
-  db.collection('wallets').find({}).toArray(function (err, wallets) {
+  db.collection('wallets').find({}).sort({createdAt: -1}).toArray(function (err, wallets) {
     if (err) {
       next(err);
       return;
@@ -146,9 +145,8 @@ function getWalletInfo(req, res, next) {
       return;
     }
     
-    if (wallet) {
+    if (wallet && wallet.walletAddress) {
       var walletContractInstance = web3.eth.contract(WALLET_CONTRACT_ABI).at(wallet.walletAddress);
-      // Get its balance as it may change between queries
       wallet.balance = parseFloat(walletContractInstance._eth.getBalance(wallet.walletAddress));
       res.send(wallet);
     } else {
