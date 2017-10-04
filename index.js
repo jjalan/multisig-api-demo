@@ -99,6 +99,13 @@ function getAllWallets(req, res, next) {
   });
 }
 
+// Add a function to allow 
+function allowCORS(req, res, next) {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "X-Requested-With");
+  return next();
+}
+
 MongoClient.connect(DB_URI, function(err, database) {
 	if (err) {
 		console.log(err);
@@ -107,6 +114,7 @@ MongoClient.connect(DB_URI, function(err, database) {
   
   db = database;
   var server = restify.createServer();
+  server.use(allowCORS);
   server.post('/wallet', createWallet);
   server.get('/wallets', getAllWallets);
   server.listen(SERVER_PORT, function () {
