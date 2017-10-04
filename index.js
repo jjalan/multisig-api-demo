@@ -15,7 +15,7 @@ var ETHEREUM_NODE = 'https://api.myetherapi.com/rop';
 var ETHEREUM_NODE_CHAIN_ID = 3;
 var SERVER_ETHEREUM_FROM_ADDRESS = '0x4054Db09C41e787cF5014A453f91c71418faB9AF';
 var SERVER_ETHEREUM_PRIVATE_KEY = 'b5eae943a077be8b3d53d91dd87818f3c869b7ac58723aca1e57575e2a691e3c';
-var DB_URI = process.env.DATABASE_URI || 'mongodb://localhost:27017/starbase';
+var DB_URI = process.env.DATABASE_URI || 'mongodb://localhost:27017/multisig';
 
 var MAX_WALLET_OWNERS = 3;
 var MIN_SIGNATURES_REQUIRED = 2;
@@ -86,8 +86,8 @@ function createWallet(req, res, next) {
       
         // Get details about the wallet
         var walletContractInstance = web3.eth.contract(WALLET_CONTRACT_ABI).at(walletAddress);
-        var numberOfConfirmationsRequired = walletContractInstance.required.call();
-        var balance = walletContractInstance._eth.getBalance(walletAddress);
+        var numberOfConfirmationsRequired = parseFloat(walletContractInstance.required());
+        var balance = parseFloat(walletContractInstance._eth.getBalance(walletAddress));
         var owners = walletContractInstance.getOwners();
       
         var obj = {
@@ -97,7 +97,7 @@ function createWallet(req, res, next) {
           balance: balance,
           numberOfConfirmationsRequired: numberOfConfirmationsRequired
         };
-      
+        
         db.collection('wallets').insertOne(obj, function (err, result) {
           if (err) {
             next(err);
@@ -135,7 +135,7 @@ function getAllWallets(req, res, next) {
       if (wallet.walletAddress) {
         // Get its balance as it may change between queries
         var walletContractInstance = web3.eth.contract(WALLET_CONTRACT_ABI).at(wallet.walletAddress);
-        wallet.balance = walletContractInstance._eth.getBalance(wallet.walletAddress);
+        wallet.balance = parseFloat(walletContractInstance._eth.getBalance(wallet.walletAddress));
       }
     }
     res.send(wallets);
