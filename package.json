@@ -1,6 +1,6 @@
 {
   "name": "starbase-demo-api",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Starbase API Project",
   "main": "index.js",
   "scripts": {
@@ -11,6 +11,7 @@
     "lodash": "^4.17.4",
     "mongodb": "^2.2.31",
     "restify": "^6.0.1",
+    "restify-cors-middleware": "^1.0.1",
     "web3": "0.17.0-alpha",
     "web3-eth-accounts": "^1.0.0-beta.22"
   }
